@@ -5,10 +5,10 @@
 
 public Plugin:myinfo =
 {
-	name = "map downloader",
-	author = "Icewind",
+	name = "Map Downloader",
+	author = "Icewind, Modified by PepperKick",
 	description = "Automatically download missing maps",
-	version = "0.1",
+	version = "0.1.1",
 	url = "https://spire.tf"
 };
 
@@ -25,11 +25,9 @@ new CURL_Default_opt[][2] = {
 
 #define CURL_DEFAULT_OPT(%1) curl_easy_setopt_int_array(%1, CURL_Default_opt, sizeof(CURL_Default_opt))
 
-new Handle:g_hCvarUrl = INVALID_HANDLE;
+new Handle:configFileHandle = INVALID_HANDLE;
 
 public OnPluginStart() {
-	g_hCvarUrl = CreateConVar("sm_map_download_base", "http://dl.serveme.tf/maps/", "map download url", FCVAR_PROTECTED);
-
 	RegServerCmd("changelevel", HandleChangeLevelAction);
 }
 
@@ -50,25 +48,38 @@ public Action:HandleChangeLevelAction(args) {
 }
 
 public DownloadMap(String:map[128], String:targetPath[128]) {
+	decl String:path[PLATFORM_MAX_PATH];
+
+	BuildPath(Path_SM, path, PLATFORM_MAX_PATH, "configs/mapdownloader.txt");
+	configFileHandle = OpenFile(path, "r");
+
+	StartMapDownload(map, targetPath);
+}
+
+public StartMapDownload(String:map[128], String:targetPath[128]) {
 	decl String:fullUrl[512];
-	decl String:BaseUrl[128];
-	GetConVarString(g_hCvarUrl, BaseUrl, sizeof(BaseUrl));
-	new Handle:curl = curl_easy_init();
-	new Handle:output_file = curl_OpenFile(targetPath, "wb");
-	CURL_DEFAULT_OPT(curl);
+	decl String:BaseUrl[256];
 
-	Format(fullUrl, sizeof(fullUrl), "%s/%s.bsp", BaseUrl, map);
+	if (!IsEndOfFile(configFileHandle) && ReadFileLine(configFileHandle, BaseUrl, sizeof(BaseUrl))) {
+		new Handle:curl = curl_easy_init();
+		new Handle:output_file = curl_OpenFile(targetPath, "wb");
+		CURL_DEFAULT_OPT(curl);
 
-	PrintToChatAll("Trying to download %s from %s", map, fullUrl);
+		TrimString(BaseUrl);
 
-	new Handle:hDLPack = CreateDataPack();
-	WritePackCell(hDLPack, _:output_file);
-	WritePackString(hDLPack, map);
-	WritePackString(hDLPack, targetPath);
+		Format(fullUrl, sizeof(fullUrl), "%s/%s.bsp", BaseUrl, map);
 
-	curl_easy_setopt_handle(curl, CURLOPT_WRITEDATA, output_file);
-	curl_easy_setopt_string(curl, CURLOPT_URL, fullUrl);
-	curl_easy_perform_thread(curl, onComplete, hDLPack);
+		PrintToChatAll("Trying to download %s from %s", map, fullUrl);
+
+		new Handle:hDLPack = CreateDataPack();
+		WritePackCell(hDLPack, _:output_file);
+		WritePackString(hDLPack, map);
+		WritePackString(hDLPack, targetPath);
+
+		curl_easy_setopt_handle(curl, CURLOPT_WRITEDATA, output_file);
+		curl_easy_setopt_string(curl, CURLOPT_URL, fullUrl);
+		curl_easy_perform_thread(curl, onComplete, hDLPack);
+	}
 }
 
 public onComplete(Handle:hndl, CURLcode:code, any hDLPack) {
@@ -88,11 +99,17 @@ public onComplete(Handle:hndl, CURLcode:code, any hDLPack) {
 		curl_easy_strerror(code, sError, sizeof(sError));
 		PrintToChatAll("cURL error: %s", sError);
 		PrintToChatAll("cURL error code: %d", code);
+
+		// Call start map download again to check for next url
+		StartMapDownload(map, targetPath);
 	} else {
 		//PrintToChatAll("map size(%s): %d", targetPath, FileSize(targetPath));
 		if (FileSize(targetPath) < 1024) {
 			PrintToChatAll("Map file to small, discarding");
 			DeleteFile(targetPath);
+
+			// Call start map download again to check for next url
+			StartMapDownload(map, targetPath);
 			return;
 		}
 		PrintToChatAll("Successfully downloaded map %s", map);
@@ -105,4 +122,5 @@ public changeLevel(String:map[128]) {
 	decl String:command[512];
 	Format(command, sizeof(command), "changelevel %s", map);
 	ServerCommand(command, sizeof(command));
+	CloseHandle(configFileHandle);
 }
