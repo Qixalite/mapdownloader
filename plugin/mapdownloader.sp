@@ -3,12 +3,12 @@
 #include <cURL>
 #include <tf2>
 
-public Plugin:myinfo =
+public Plugin:plugin =
 {
 	name = "Map Downloader",
 	author = "Icewind, Modified by PepperKick",
 	description = "Automatically download missing maps",
-	version = "0.1.1",
+	version = "0.1.2",
 	url = "https://spire.tf"
 };
 
@@ -34,6 +34,10 @@ public OnPluginStart() {
 public Action:HandleChangeLevelAction(args) {
 	new String:arg[128];
 	GetCmdArg(1, arg, sizeof(arg));
+
+	if (StrContains(arg, "workshop/", false) != -1) {
+		return Plugin_Continue;
+	}
 
 	decl String:path[128];
 	Format(path, sizeof(path), "maps/%s.bsp", arg);
@@ -105,7 +109,7 @@ public onComplete(Handle:hndl, CURLcode:code, any hDLPack) {
 	} else {
 		//PrintToChatAll("map size(%s): %d", targetPath, FileSize(targetPath));
 		if (FileSize(targetPath) < 1024) {
-			PrintToChatAll("Map file to small, discarding");
+			PrintToChatAll("Map file too small, discarding");
 			DeleteFile(targetPath);
 
 			// Call start map download again to check for next url
