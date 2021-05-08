@@ -3,7 +3,7 @@
 #include <cURL>
 #include <tf2>
 
-public Plugin:plugin =
+public Plugin:myinfo =
 {
 	name = "Map Downloader",
 	author = "Icewind, Modified by PepperKick",
